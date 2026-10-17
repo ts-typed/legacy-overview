@@ -1,1 +1,21 @@
+# Dependencies and generated artifacts
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+.strict-ts/
+.ts-typed/
+
+# Local implementation planning and orchestration
+.ai-orchestration/
+.superpowers/
+docs/plans/
+docs/implementations/
+docs/superpowers/
+IMPLEMENTAR_TUDO.md
+
+# Local environment and editor files
+.env
+.env.*
+!.env.example
 .DS_Store
