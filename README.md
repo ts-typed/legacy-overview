@@ -6,6 +6,7 @@ This repository holds the project's specification, architecture notes and usage 
 
 - [`ts-typed/compiler`](https://github.com/ts-typed/compiler) ([npm](https://www.npmjs.com/package/@ts-typed/compiler)) — core compiler, CLI and runtime (`@ts-typed/compiler`, works with any TypeScript project, no framework required). **[Full documentation](https://github.com/ts-typed/compiler#readme)**: configuration reference, every decorator, supported language features, the `StrictTypeError` shape, known limitations.
 - [`ts-typed/nestjs`](https://github.com/ts-typed/nestjs) ([npm](https://www.npmjs.com/package/@ts-typed/nestjs)) — NestJS integration (`@ts-typed/nestjs`): project resolution adapter, `StrictTypeErrorFilter`, `StrictTypeHttpError`. **[Full documentation](https://github.com/ts-typed/nestjs#readme)**: how the 400/500 status is decided, `ServerPopulated()`/`TypeErrorResponse()` usage, building a custom filter.
+- [`ts-typed/validators`](https://github.com/ts-typed/validators) ([npm](https://www.npmjs.com/package/@ts-typed/validators)) — document/data validators (`@ts-typed/validators`) built on `@ts-typed/compiler`'s `ValueObject`: starting with Brazil (`CPF`, `CNPJ`, `PIS`/`Pasep`/`Nis`/`Nit`, `CEP`, `Placa`, `CNH`). **[Full documentation](https://github.com/ts-typed/validators#readme)**.
 
 ## Quickstart
 
