@@ -24,7 +24,7 @@ npx ts-typed build
 
 The project preserves application compatibility when JavaScript cannot completely intercept a mutation, particularly external aliases, dynamic code and unsupported built-ins. These cases are warnings by default rather than hidden successes. `any`, `unknown`, and declarations without an annotation or initializer remain explicitly open and are listed separately in coverage output. Both package READMEs have a "Known limitations" section listing every current scope boundary and why it exists.
 
-Background docs, kept for historical/design context: [full specification](docs/SPEC.md), [architecture](docs/architecture.md), [quick-start guide](docs/usage/quickstart.md), [performance notes](docs/performance.md). The two package READMEs above are the up-to-date, maintained reference for what's actually supported today — check those first.
+Background docs, kept for historical/design context: [full specification](docs/SPEC.md), [architecture](docs/architecture.md), [quick-start guide](docs/usage/quickstart.md), [performance notes and the reproducible Express/Nest/TypeORM battery](docs/performance.md). The two package READMEs above are the up-to-date, maintained reference for what's actually supported today — check those first.
 
 ## License
 
