@@ -8,7 +8,7 @@ const express = require('express');
 const { Controller, Get, Module } = require('@nestjs/common');
 const { NestFactory } = require('@nestjs/core');
 const { DataSource, Entity, PrimaryGeneratedColumn, Column } = require('typeorm');
-const { assertValue, protectValue } = require('@ts-typed/compiler');
+const { assertValue, protectValue, protectOptimizedImmutableValue } = require('../../system/base/dist');
 const { StrictTypeErrorFilter } = require('@ts-typed/nestjs');
 
 const USER_COUNT = 10_000;
@@ -134,13 +134,13 @@ function stripInternal(measurement) {
   return measurement;
 }
 
-async function validateResponse(url) {
+async function validateResponse(url, expectedUserCount) {
   const response = await fetch(url);
   if (response.status !== 200) {
     throw new Error(`Expected HTTP 200 from ${url}, received ${response.status}`);
   }
   const users = await response.json();
-  if (!Array.isArray(users) || users.length !== USER_COUNT || Object.hasOwn(users[0], 'passwordHash')) {
+  if (!Array.isArray(users) || users.length !== expectedUserCount || Object.hasOwn(users[0], 'passwordHash')) {
     throw new Error(`Invalid benchmark response from ${url}`);
   }
 }
@@ -163,8 +163,8 @@ async function runHttpSample(url) {
   return HTTP_REQUEST_COUNT / (elapsedMilliseconds / 1_000);
 }
 
-async function measureHttp(name, url) {
-  await validateResponse(url);
+async function measureHttp(name, url, expectedUserCount) {
+  await validateResponse(url, expectedUserCount);
   await runHttpSample(url);
   const samples = [];
   for (let index = 0; index < 5; index += 1) {
@@ -179,16 +179,20 @@ async function measureHttp(name, url) {
   });
 }
 
-function createExpressApp(isProtected) {
+function createExpressApp(mode, userCount) {
   const application = express();
   application.get('/users', async (_request, response, next) => {
     try {
-      const entities = await repository.find({ order: { id: 'ASC' } });
-      if (isProtected) {
+      const entities = await repository.find({ order: { id: 'ASC' }, take: userCount });
+      if (mode !== 'baseline') {
         assertValue(ENTITY_ARRAY_SCHEMA, entities, CONTEXT);
       }
       const users = projectWithoutPassword(entities);
-      const output = isProtected ? protectValue(RESPONSE_ARRAY_SCHEMA, users, CONTEXT) : users;
+      const output = mode === 'guarded'
+        ? protectValue(RESPONSE_ARRAY_SCHEMA, users, CONTEXT)
+        : mode === 'optimizedImmutable'
+          ? protectOptimizedImmutableValue(RESPONSE_ARRAY_SCHEMA, users, CONTEXT)
+          : users;
       response.json(output);
     } catch (error) {
       next(error);
@@ -197,28 +201,27 @@ function createExpressApp(isProtected) {
   return application;
 }
 
-class NestBaselineController {
-  async list() {
-    return projectWithoutPassword(await repository.find({ order: { id: 'ASC' } }));
+function createNestModule(mode, userCount) {
+  class BenchmarkController {
+    async list() {
+      const entities = await repository.find({ order: { id: 'ASC' }, take: userCount });
+      if (mode !== 'baseline') {
+        assertValue(ENTITY_ARRAY_SCHEMA, entities, CONTEXT);
+      }
+      const users = projectWithoutPassword(entities);
+      return mode === 'guarded'
+        ? protectValue(RESPONSE_ARRAY_SCHEMA, users, CONTEXT)
+        : mode === 'optimizedImmutable'
+          ? protectOptimizedImmutableValue(RESPONSE_ARRAY_SCHEMA, users, CONTEXT)
+          : users;
+    }
   }
+  Controller('users')(BenchmarkController);
+  Get()(BenchmarkController.prototype, 'list', Object.getOwnPropertyDescriptor(BenchmarkController.prototype, 'list'));
+  class BenchmarkModule {}
+  Module({ controllers: [BenchmarkController] })(BenchmarkModule);
+  return BenchmarkModule;
 }
-Controller('users')(NestBaselineController);
-Get()(NestBaselineController.prototype, 'list', Object.getOwnPropertyDescriptor(NestBaselineController.prototype, 'list'));
-
-class NestProtectedController {
-  async list() {
-    const entities = await repository.find({ order: { id: 'ASC' } });
-    assertValue(ENTITY_ARRAY_SCHEMA, entities, CONTEXT);
-    return protectValue(RESPONSE_ARRAY_SCHEMA, projectWithoutPassword(entities), CONTEXT);
-  }
-}
-Controller('users')(NestProtectedController);
-Get()(NestProtectedController.prototype, 'list', Object.getOwnPropertyDescriptor(NestProtectedController.prototype, 'list'));
-
-class NestBaselineModule {}
-Module({ controllers: [NestBaselineController] })(NestBaselineModule);
-class NestProtectedModule {}
-Module({ controllers: [NestProtectedController] })(NestProtectedModule);
 
 async function listenExpress(application) {
   const server = application.listen(0, '127.0.0.1');
@@ -235,6 +238,65 @@ async function listenNest(application) {
   return `http://127.0.0.1:${application.getHttpServer().address().port}/users`;
 }
 
+async function measureExpressScenario(mode, userCount) {
+  const listener = await listenExpress(createExpressApp(mode, userCount));
+  try {
+    return await measureHttp(`Express ${mode} (${userCount} users)`, listener.url, userCount);
+  } finally {
+    await new Promise((resolve) => listener.server.close(resolve));
+  }
+}
+
+async function measureNestScenario(mode, userCount) {
+  const application = await NestFactory.create(createNestModule(mode, userCount), { logger: false });
+  if (mode !== 'baseline') {
+    application.useGlobalFilters(new StrictTypeErrorFilter());
+  }
+  try {
+    return await measureHttp(
+      `Nest ${mode} (${userCount} users)`,
+      await listenNest(application),
+      userCount,
+    );
+  } finally {
+    await application.close();
+  }
+}
+
+async function measureRuntimeBatches(hydratedUsers, projectedUsers, batchSizes) {
+  const batches = {};
+  for (const userCount of batchSizes) {
+    batches[String(userCount)] = Object.freeze({
+      validation: await measureAsync(`assertValue(UserResponse[${userCount}])`, async () =>
+        assertValue(RESPONSE_ARRAY_SCHEMA, projectedUsers.slice(0, userCount), CONTEXT)),
+      guarded: await measureAsync(`project + protectValue(UserResponse[${userCount}])`, async () =>
+        protectValue(RESPONSE_ARRAY_SCHEMA, projectWithoutPassword(hydratedUsers.slice(0, userCount)), CONTEXT)),
+      optimizedImmutable: await measureAsync(`project + protectOptimizedImmutableValue(UserResponse[${userCount}])`, async () =>
+        protectOptimizedImmutableValue(RESPONSE_ARRAY_SCHEMA, projectWithoutPassword(hydratedUsers.slice(0, userCount)), CONTEXT)),
+    });
+  }
+  return Object.freeze(batches);
+}
+
+async function measureHttpBatches(batchSizes) {
+  const batches = {};
+  for (const userCount of batchSizes) {
+    batches[String(userCount)] = Object.freeze({
+      express: Object.freeze({
+        baseline: await measureExpressScenario('baseline', userCount),
+        guarded: await measureExpressScenario('guarded', userCount),
+        optimizedImmutable: await measureExpressScenario('optimizedImmutable', userCount),
+      }),
+      nest: Object.freeze({
+        baseline: await measureNestScenario('baseline', userCount),
+        guarded: await measureNestScenario('guarded', userCount),
+        optimizedImmutable: await measureNestScenario('optimizedImmutable', userCount),
+      }),
+    });
+  }
+  return Object.freeze(batches);
+}
+
 async function run() {
   const dataSource = new DataSource({
     type: 'better-sqlite3',
@@ -249,39 +311,25 @@ async function run() {
 
   const hydratedUsers = await repository.find({ order: { id: 'ASC' } });
   const projectedUsers = projectWithoutPassword(hydratedUsers);
+  const batchSizes = Object.freeze([1, 50, USER_COUNT]);
   const runtime = Object.freeze({
     primitive: measureSync('assertValue(string)', 5_000_000, () => assertValue(STRING, 'ada@example.com', CONTEXT)),
     responseObject: measureSync('assertValue(UserResponse)', 1_000_000, () => assertValue(USER_RESPONSE_SCHEMA, projectedUsers[0], CONTEXT)),
     responseArray100: measureSync('assertValue(UserResponse[100])', 20_000, () => assertValue(RESPONSE_ARRAY_SCHEMA, projectedUsers.slice(0, 100), CONTEXT)),
-    responseArray10k: await measureAsync('assertValue(UserResponse[10,000])', async () => assertValue(RESPONSE_ARRAY_SCHEMA, projectedUsers, CONTEXT)),
     entityValidation10k: await measureAsync('assertValue(UserEntity[10,000])', async () => assertValue(ENTITY_ARRAY_SCHEMA, hydratedUsers, CONTEXT)),
-    protection10k: await measureAsync('project + protectValue(UserResponse[10,000])', async () => protectValue(RESPONSE_ARRAY_SCHEMA, projectWithoutPassword(hydratedUsers), CONTEXT)),
+    batches: await measureRuntimeBatches(hydratedUsers, projectedUsers, batchSizes),
   });
 
-  const expressBaseline = await listenExpress(createExpressApp(false));
-  const expressProtected = await listenExpress(createExpressApp(true));
-  const nestBaseline = await NestFactory.create(NestBaselineModule, { logger: false });
-  const nestProtected = await NestFactory.create(NestProtectedModule, { logger: false });
-  nestProtected.useGlobalFilters(new StrictTypeErrorFilter());
-  const nestBaselineUrl = await listenNest(nestBaseline);
-  const nestProtectedUrl = await listenNest(nestProtected);
-
   try {
-    const http = Object.freeze({
-      expressBaseline: await measureHttp('Express: TypeORM + projection', expressBaseline.url),
-      expressProtected: await measureHttp('Express: entity validation + response protection', expressProtected.url),
-      nestBaseline: await measureHttp('Nest: TypeORM + projection', nestBaselineUrl),
-      nestProtected: await measureHttp('Nest: entity validation + response protection + StrictTypeErrorFilter', nestProtectedUrl),
-    });
+    const http = await measureHttpBatches(batchSizes);
     console.log(JSON.stringify(Object.freeze({
       node: process.version,
-      methodology: Object.freeze({ userCount: USER_COUNT, httpRequestsPerSample: HTTP_REQUEST_COUNT, httpConcurrency: HTTP_CONCURRENCY, database: 'TypeORM + better-sqlite3 in-memory' }),
+      methodology: Object.freeze({ userCounts: batchSizes, httpRequestsPerSample: HTTP_REQUEST_COUNT, httpConcurrency: HTTP_CONCURRENCY, database: 'TypeORM + better-sqlite3 in-memory' }),
       verification: Object.freeze({ entitiesAreInstances: hydratedUsers.every((user) => user instanceof BenchmarkUserEntity), passwordHashRemoved: !Object.hasOwn(projectWithoutPassword([hydratedUsers[0]])[0], 'passwordHash') }),
       runtime: Object.fromEntries(Object.entries(runtime).map(([key, value]) => [key, stripInternal(value)])),
       http,
     }), null, 2));
   } finally {
-    await Promise.all([new Promise((resolve) => expressBaseline.server.close(resolve)), new Promise((resolve) => expressProtected.server.close(resolve)), nestBaseline.close(), nestProtected.close()]);
     await dataSource.destroy();
   }
 }
