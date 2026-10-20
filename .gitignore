@@ -1,6 +1,7 @@
 # Dependencies and generated artifacts
 node_modules/
 dist/
+benchmarks/projects/**/dist-baseline/
 coverage/
 *.tsbuildinfo
 .strict-ts/
