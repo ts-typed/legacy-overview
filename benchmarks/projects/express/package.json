@@ -1,0 +1,27 @@
+{
+  "name": "ts-typed-express-consumer",
+  "private": true,
+  "version": "0.0.0",
+  "scripts": {
+    "install:local": "npm install",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "build:baseline": "tsc -p tsconfig.json --outDir dist-baseline",
+    "build:typed": "ts-typed build",
+    "build": "npm run build:baseline && npm run build:typed",
+    "test:baseline": "node dist-baseline/self-test.js",
+    "test:typed": "TS_TYPED_EXPECTS_REJECTION=1 node dist/self-test.js",
+    "benchmark": "node benchmark.cjs",
+    "test": "npm run typecheck && npm run build && npm run test:baseline && npm run test:typed"
+  },
+  "dependencies": {
+    "@ts-typed/compiler": "0.1.31",
+    "@ts-typed/validators": "0.1.10",
+    "express": "5.2.1"
+  },
+  "devDependencies": {
+    "@types/express": "5.0.5",
+    "@types/node": "22.20.5",
+    "ts-typed": "npm:@ts-typed/compiler@0.1.31",
+    "typescript": "5.9.3"
+  }
+}

@@ -112,3 +112,72 @@ node --expose-gc benchmarks/runtime-benchmark.cjs
 ```
 
 Esse benchmark cobre inicialização/escrita de campos e não substitui a bateria TypeORM/HTTP acima. Build também é uma métrica separada (`TS_TYPED_BUILD_METRICS=1`, interna); este documento mede somente custos em runtime.
+
+## Bateria de consumidores: Express e conversão CSV
+
+Além do harness TypeORM, o repositório agora contém consumidores executáveis em
+[`benchmarks/projects`](../benchmarks/projects):
+
+- **Express**: o mesmo pool de 10.000 usuários é servido em lotes de 1, 50 e
+  10.000. O caminho baseline é compilado por `tsc`; o caminho typed é compilado
+  por `ts-typed build`. Ambos instanciam `Email` de `@ts-typed/validators` e
+  removem `passwordHash` antes de responder. A rota adicional
+  `/users-optimized` faz a projeção para POJO, valida uma vez com
+  `protectOptimizedImmutableValue` e congela o grafo.
+- **CSV**: o script converte linhas para objetos públicos, valida e-mails com o
+  validator e descarta `passwordHash`. O baseline e o typed usam a mesma entrada
+  e os mesmos dados; a diferença é a proteção inserida nas fronteiras do typed.
+
+O comando abaixo executa os testes de invariantes antes dos benchmarks e mede
+1.000, 10.000 e 50.000 linhas no CSV:
+
+```bash
+node benchmarks/exhaustive-battery.cjs
+```
+
+Em uma execução de referência (Node `v22.22.3`, macOS, 7 amostras após 2
+warmups), as medianas foram:
+
+| Cenário | Baseline | ts-typed | Relação |
+| --- | ---: | ---: | ---: |
+| CSV, 1.000 linhas | 0,493 ms | 21,919 ms | 44,5x |
+| CSV, 10.000 linhas | 3,758 ms | 201,496 ms | 53,6x |
+| CSV, 50.000 linhas | 18,267 ms | 1.142,554 ms | 62,5x |
+| Express, 1 usuário | 0,811 ms | 0,650 ms | ruído de rede local |
+| Express, 50 usuários | 0,481 ms | 3,473 ms | 7,2x |
+| Express, 10.000 usuários | 5,455 ms | 311,306 ms | 57,1x |
+| Express otimizado, 10.000 usuários | — | 198,085 ms | 1,57x sobre typed normal |
+
+Os números Express são latência de uma request local, não throughput. A rota
+otimizada ainda inclui o custo de projetar e serializar o array intermediário;
+ela é uma demonstração segura da API, não um passe livre para adicionar
+`JSON.stringify` a toda aplicação. Em um endpoint real, a recomendação é
+construir o POJO de saída uma vez e aplicar o contrato otimizado diretamente,
+sem transformar o mesmo objeto antes em um valor mutável protegido.
+
+### Leitura dos resultados
+
+O custo cresce quase linearmente com o número de objetos porque cada item cruza
+fronteiras de entrada/saída e cada campo precisa ser comparado com seu schema.
+No CSV, o custo é dominado por validações repetidas de linhas e por accessors
+instalados em objetos que permanecem mutáveis. No Express, o socket local e o
+JSON são pequenos para 1 item; a proteção domina a resposta de 10.000.
+
+O caminho `TTOptImmut` reduz o custo quando o valor de saída é um POJO que não
+será alterado. Ele não deve ser aplicado a entities TypeORM ou objetos com
+accessors; nesses casos use a proteção normal. A melhor otimização estrutural
+continua sendo limitar o lote com paginação/cursor e selecionar apenas os
+campos necessários. Para pipelines CSV grandes, agrupe a validação em lotes,
+evite criar cópias intermediárias e faça o parse em streaming se a memória for
+o gargalo.
+
+### Checklist para estudos futuros
+
+1. Fixar Node, CPU, modo de energia e quantidade de warmups/amostras.
+2. Medir separadamente parse/DB, projeção, validação, proteção e serialização.
+3. Reportar mediana, p95 e memória; não usar uma única amostra.
+4. Repetir o mesmo fixture em baseline, proteção normal e `TTOptImmut`.
+5. Verificar invariantes de segurança em cada amostra: campo secreto ausente,
+   tipo incorreto rejeitado e tentativa de mutação bloqueada.
+6. Tratar warnings de cobertura como parte do resultado: um contrato
+   `unsupported` ou `partial` não pode ser apresentado como cobertura total.

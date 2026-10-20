@@ -1,0 +1,13 @@
+{
+  "$schema": "./node_modules/@ts-typed/compiler/schema.json",
+  "entry": "src/server.ts",
+  "tsconfig": "tsconfig.json",
+  "outDir": "dist",
+  "compiler": {
+    "sourceMap": true,
+    "onUnsupported": "warn",
+    "enforceReadonly": true
+  },
+  "ncc": { "enabled": false },
+  "diagnostics": { "format": "json", "coverage": "summary", "reportFile": null }
+}

@@ -27,3 +27,8 @@ is checked for the requested size and for absence of `passwordHash`.
 The generated JSON is a local measurement, not a cross-machine SLA. See
 [`docs/performance.md`](../../docs/performance.md) for methodology, reference
 results, limitations, and interpretation.
+
+For the broader consumer battery (Express, CSV CLI and the existing Nest
+consumer), run [`../exhaustive-battery.cjs`](../exhaustive-battery.cjs). That
+runner validates invariants before collecting performance samples and keeps
+the TypeORM/HTTP stress harness here as a separate, more focused study.
