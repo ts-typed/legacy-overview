@@ -24,6 +24,12 @@ paths in Express and NestJS. It measures batches of 1, 50, and 10,000 items,
 plus primitive, object, and array validation without HTTP. Every HTTP response
 is checked for the requested size and for absence of `passwordHash`.
 
+The JSON report also includes an isolated pipeline breakdown for each batch:
+TypeORM find/hydration, entity validation, password projection, response
+validation, response protection, and baseline/guarded `JSON.stringify`. These
+stage medians are independent measurements and should be used to identify
+bottlenecks, not added as an exact request latency.
+
 The generated JSON is a local measurement, not a cross-machine SLA. See
 [`docs/performance.md`](../../docs/performance.md) for methodology, reference
 results, limitations, and interpretation.

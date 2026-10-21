@@ -278,6 +278,47 @@ async function measureRuntimeBatches(hydratedUsers, projectedUsers, batchSizes) 
   return Object.freeze(batches);
 }
 
+async function measurePipelineStages(hydratedUsers, batchSizes) {
+  const stages = {};
+  for (const userCount of batchSizes) {
+    const users = hydratedUsers.slice(0, userCount);
+    const baselineResponse = projectWithoutPassword(users);
+    const guardedResponse = protectValue(RESPONSE_ARRAY_SCHEMA, projectWithoutPassword(users), CONTEXT);
+
+    stages[String(userCount)] = Object.freeze({
+      typeormFindHydration: await measureAsync(
+        `TypeORM find + hydration (${userCount})`,
+        async () => repository.find({ order: { id: 'ASC' }, take: userCount }),
+      ),
+      entityValidation: await measureAsync(
+        `entity validation (${userCount})`,
+        async () => assertValue(ENTITY_ARRAY_SCHEMA, users, CONTEXT),
+      ),
+      projection: await measureAsync(
+        `password projection (${userCount})`,
+        async () => projectWithoutPassword(users),
+      ),
+      responseValidation: await measureAsync(
+        `response validation (${userCount})`,
+        async () => assertValue(RESPONSE_ARRAY_SCHEMA, baselineResponse, CONTEXT),
+      ),
+      responseProtection: await measureAsync(
+        `response protection (${userCount})`,
+        async () => protectValue(RESPONSE_ARRAY_SCHEMA, projectWithoutPassword(users), CONTEXT),
+      ),
+      jsonSerializationBaseline: await measureAsync(
+        `JSON serialization baseline (${userCount})`,
+        async () => JSON.stringify(baselineResponse),
+      ),
+      jsonSerializationGuarded: await measureAsync(
+        `JSON serialization guarded (${userCount})`,
+        async () => JSON.stringify(guardedResponse),
+      ),
+    });
+  }
+  return Object.freeze(stages);
+}
+
 async function measureHttpBatches(batchSizes) {
   const batches = {};
   for (const userCount of batchSizes) {
@@ -318,6 +359,7 @@ async function run() {
     responseArray100: measureSync('assertValue(UserResponse[100])', 20_000, () => assertValue(RESPONSE_ARRAY_SCHEMA, projectedUsers.slice(0, 100), CONTEXT)),
     entityValidation10k: await measureAsync('assertValue(UserEntity[10,000])', async () => assertValue(ENTITY_ARRAY_SCHEMA, hydratedUsers, CONTEXT)),
     batches: await measureRuntimeBatches(hydratedUsers, projectedUsers, batchSizes),
+    pipeline: await measurePipelineStages(hydratedUsers, batchSizes),
   });
 
   try {

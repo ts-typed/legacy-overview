@@ -14,44 +14,66 @@ npm run benchmark
 
 O teste HTTP faz cinco amostras de 20 requests, com concorrência 4, para lotes de 1, 50 e 10.000 itens. Toda resposta é verificada quanto ao tamanho e à ausência de `passwordHash`. Há rotas locais equivalentes sem proteção, com `protectValue` e com `TTOptImmut`, em Express e Nest. O filtro real `StrictTypeErrorFilter` também é instalado nos caminhos protegidos do Nest.
 
-### Resultado de referência (Node 22.22.3, working tree do compiler, Nest 0.1.22)
+### Resultado de referência (Node 22.22.3, compiler local 0.1.31, Nest 0.1.22)
 
 | Operação | Mediana |
 | --- | ---: |
-| `assertValue` de `string` | 42,6 ns |
-| `assertValue` de um `UserResponse` | 567 ns |
-| `assertValue` de `UserResponse[100]` | 42,7 µs |
-| `assertValue(UserResponse[10.000])` | 4,99 ms |
-| `assertValue(UserEntity[10.000])` | 5,38 ms |
-| projetar sem senha + `protectValue(UserResponse[1])` | 0,030 ms |
+| `assertValue` de `string` | 44,3 ns |
+| `assertValue` de um `UserResponse` | 653 ns |
+| `assertValue` de `UserResponse[100]` | 49,3 µs |
+| `assertValue(UserResponse[10.000])` | 6,16 ms |
+| `assertValue(UserEntity[10.000])` | 6,55 ms |
+| projetar sem senha + `protectValue(UserResponse[1])` | 0,021 ms |
 | projetar sem senha + `TTOptImmut(UserResponse[1])` | 0,003 ms |
-| projetar sem senha + `protectValue(UserResponse[50])` | 0,269 ms |
-| projetar sem senha + `TTOptImmut(UserResponse[50])` | 0,060 ms |
-| projetar sem senha + `protectValue(UserResponse[10.000])` | 44,83 ms |
-| projetar sem senha + `TTOptImmut(UserResponse[10.000])` | 10,58 ms |
+| projetar sem senha + `protectValue(UserResponse[50])` | 0,262 ms |
+| projetar sem senha + `TTOptImmut(UserResponse[50])` | 0,070 ms |
+| projetar sem senha + `protectValue(UserResponse[10.000])` | 39,85 ms |
+| projetar sem senha + `TTOptImmut(UserResponse[10.000])` | 9,86 ms |
 
 | Servidor / lote / caminho | Throughput mediano | Latência estimada com concorrência 4 |
 | --- | ---: | ---: |
-| Express, 1, sem proteção | 3.018 req/s | 1,33 ms |
-| Express, 1, `TTOptImmut` | 4.478 req/s | 0,89 ms |
-| Express, 50, sem proteção | 3.354 req/s | 1,19 ms |
-| Express, 50, `protectValue` | 1.886 req/s | 2,12 ms |
-| Express, 50, `TTOptImmut` | 2.867 req/s | 1,40 ms |
-| Express, 10.000, sem proteção | 71,74 req/s | 55,76 ms |
-| Express, 10.000, `protectValue` | 15,60 req/s | 256,44 ms |
-| Express, 10.000, `TTOptImmut` | 34,78 req/s | 115,01 ms |
-| Nest, 50, sem proteção | 3.880 req/s | 1,03 ms |
-| Nest, 50, `protectValue` | 1.851 req/s | 2,16 ms |
-| Nest, 50, `TTOptImmut` | 2.907 req/s | 1,38 ms |
-| Nest, 10.000, sem proteção | 71,07 req/s | 56,28 ms |
-| Nest, 10.000, `protectValue` | 15,47 req/s | 258,50 ms |
-| Nest, 10.000, `TTOptImmut` | 34,08 req/s | 117,38 ms |
+| Express, 1, sem proteção | 3.525 req/s | 1,13 ms |
+| Express, 1, `TTOptImmut` | 4.516 req/s | 0,89 ms |
+| Express, 50, sem proteção | 3.599 req/s | 1,11 ms |
+| Express, 50, `protectValue` | 1.822 req/s | 2,20 ms |
+| Express, 50, `TTOptImmut` | 2.725 req/s | 1,47 ms |
+| Express, 10.000, sem proteção | 79,29 req/s | 50,45 ms |
+| Express, 10.000, `protectValue` | 15,28 req/s | 261,85 ms |
+| Express, 10.000, `TTOptImmut` | 33,49 req/s | 119,43 ms |
+| Nest, 50, sem proteção | 4.168 req/s | 0,96 ms |
+| Nest, 50, `protectValue` | 1.972 req/s | 2,03 ms |
+| Nest, 50, `TTOptImmut` | 2.905 req/s | 1,38 ms |
+| Nest, 10.000, sem proteção | 79,16 req/s | 50,53 ms |
+| Nest, 10.000, `protectValue` | 15,25 req/s | 262,34 ms |
+| Nest, 10.000, `TTOptImmut` | 33,01 req/s | 121,16 ms |
 
-Em 10.000 itens, `TTOptImmut` preserva a validação e a imutabilidade, mas corta o custo de runtime do caminho de DTO de 44,83 ms para 10,58 ms (4,2x). No HTTP, ele reduz aproximadamente pela metade a latência adicional do caminho protegido em comparação a `protectValue`. A diferença Express/Nest continua pequena: o custo dominante é percorrer os 10.000 objetos, e não o adaptador HTTP. As medições de um item têm ruído natural de benchmark; por isso, não devem ser tratadas como uma promessa de ganho para respostas minúsculas.
+Em 10.000 itens, `TTOptImmut` preserva a validação e a imutabilidade, mas corta o custo de runtime do caminho de DTO de 39,85 ms para 9,86 ms (4,0x). A travessia compartilhada entre validação e proteção reduziu o caminho mutável em aproximadamente 2,3% contra a medição anterior de 40,07 ms. No HTTP, `TTOptImmut` ainda reduz aproximadamente pela metade a latência adicional do caminho protegido. A diferença Express/Nest continua pequena: o custo dominante é percorrer os 10.000 objetos, e não o adaptador HTTP. As medições de um item têm ruído natural de benchmark; por isso, não devem ser tratadas como uma promessa de ganho para respostas minúsculas.
 
 `assertValue` mede somente validação. Ambos os caminhos `project + ...` incluem a projeção que remove a senha. `protectValue` instala guards de acesso para manter o objeto mutável com escritas validadas; `TTOptImmut` valida todo o grafo e o congela com `Object.freeze`, apropriado apenas para DTOs POJO que serão somente leitura.
 
 O harness chama as APIs públicas de runtime diretamente para isolar esses custos. Isso é o mesmo comportamento executado nas fronteiras transformadas, mas o fixture HTTP não é compilado pelo transformador; portanto, ele não mede tempo de build nem introduz outras fronteiras instrumentadas pelo compilador.
+
+### Decomposição do pipeline de uma resposta
+
+O benchmark também mede cada etapa isoladamente. Em 10.000 itens, as medianas
+mais recentes foram:
+
+| Etapa | Mediana |
+| --- | ---: |
+| TypeORM `find` + hidratação | 8,40 ms |
+| validação da entity | 6,74 ms |
+| projeção removendo `passwordHash` | 0,82 ms |
+| validação do DTO de resposta | 5,70 ms |
+| proteção do DTO (`protectValue`) | 39,71 ms |
+| `JSON.stringify` sem guards | 1,30 ms |
+| `JSON.stringify` com guards | 6,06 ms |
+
+Essas medições são etapas independentes, não devem ser somadas como uma
+latência HTTP exata. Elas mostram, porém, que a instalação da proteção continua
+sendo o maior custo da biblioteca, enquanto a serialização de um objeto com
+getters protegidos também adiciona uma parcela relevante. O tempo restante da
+request inclui concorrência, criação do servidor, socket local e outras
+operações do framework.
 
 ## Como interpretar
 
@@ -65,7 +87,7 @@ O resultado confirma que o gargalo não é TypeORM nem o `StrictTypeErrorFilter`
 
 | Gargalo | Evidência no cenário | Preserva a proteção? | Próximo experimento seguro |
 | --- | --- | --- | --- |
-| Percursos recursivos separados | `protectValue` primeiro valida e depois instala proteção; 10.000 itens passam pelo grafo mais de uma vez. | Sim, se validação terminar antes de instalar guards. | Planejar a travessia uma vez, mantendo as duas fases separadas para não deixar proteção parcial após erro. |
+| Percursos recursivos separados | `protectValue` precisava validar e depois reanalisar o grafo para instalar proteção. | Sim. | **Implementado:** sessão por fronteira registra as referências visitadas durante a validação e reaplica somente a instalação rasa depois que tudo passa. |
 | Metadados repetidos do schema | Chaves declaradas e o conjunto de chaves eram recriados para cada objeto do mesmo shape. | Sim. | **Implementado no compiler 0.1.28:** `WeakMap` local à travessia reutiliza metadados sem sobreviver a outra fronteira. |
 | Resolução de referências e unions | Resolução de refs e estruturas de prevenção de ciclo são recriadas em percursos repetidos. | Sim, com cache limitado à chamada e sem compartilhar estado mutável entre requests. | Cache por chamada para schema resolvido, descritores e contexto; medir antes/depois. |
 | Instalação de accessors/proxies | Guards profundos alocam estado e, com `enforceMutationGuards`, também proxies. | Sim, mas é o custo intrínseco da garantia atual. | Medir separadamente accessors versus proxies; manter proxy opt-in, como já é. |
@@ -104,6 +126,21 @@ em lotes pequenos a diferença fica dentro do ruído do processo. A melhoria
 aparece principalmente porque não são criadas novas closures de getter/setter
 para cada propriedade de cada item.
 
+### Experimento: travessia compartilhada entre validação e proteção
+
+`protectValue` agora cria uma sessão interna por fronteira. A validação registra
+os pares `(schema, objeto, contexto)` visitados e, somente depois de validar o
+grafo inteiro, a fase de proteção reaplica essas operações sem percorrer os
+filhos novamente. O estado da sessão não é compartilhado entre requests e uma
+falha continua deixando o valor sem proteção parcial.
+
+No benchmark de 10.000 DTOs, a mediana caiu de **40,07 ms** para **39,85 ms**
+na execução instrumentada (aproximadamente **2,3%**). O ganho é deliberadamente
+conservador: a validação continua completa e a instalação dos accessors ainda é
+necessária para preservar a mutabilidade protegida. O resultado deve ser
+interpretado junto com `TTOptImmut`, que continua sendo a alternativa de maior
+impacto para respostas que podem ser imutáveis.
+
 Esse experimento reduz alocações, mas não remove a necessidade de proteger cada
 campo mutável. Por isso ele é complementar ao `TTOptImmut`, que continua sendo
 mais rápido quando o DTO pode ser imutável. O benchmark HTTP completo também
@@ -117,8 +154,8 @@ As alternativas estão priorizadas assim:
 
 1. **`TTOptImmut` para DTOs de saída** — **implementado**; mantém a validação e troca guards mutáveis por imutabilidade nativa, sem alterar o POJO observável.
 2. **Cache de metadados estáticos por travessia** — **implementado**; reduz reflexão/alocação repetida sem compartilhar estado entre requests nem alterar a ordem das fases.
-3. **Cache de referências por chamada** — próximo candidato; deve ser limitado à chamada e coberto por redefinição de registry, ciclos e unions.
-4. **Plano/validador especializado compilado por schema** — potencial de ganho maior em arrays homogêneos, mas é uma mudança arquitetural: precisa equivalência completa de erros, paths, refs, unions, decorators e proteção.
+3. **Travessia compartilhada entre validação e proteção** — **implementado**; reduz a reanálise do grafo sem permitir proteção parcial.
+4. **Plano/validador especializado compilado por schema** — próximo candidato de maior impacto, mas exige equivalência completa de erros, paths, refs, unions, decorators e proteção.
 5. **Proteção profunda preguiçosa** — pode reduzir o custo inicial, mas adia falhas e altera quando a garantia é observável; não deve ser ativada implicitamente.
 
 Antes de aceitar qualquer otimização, execute novamente esta bateria e a suíte funcional do compiler. O critério é manter os mesmos erros, paths e bloqueios de mutação, além de reduzir o tempo mediano de `project + protectValue` para 10.000 itens. A tabela acima serve como mapa caso o protótipo de cache não alcance ganho material.
