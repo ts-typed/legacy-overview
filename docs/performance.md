@@ -53,6 +53,13 @@ Em 10.000 itens, `TTOptImmut` preserva a validação e a imutabilidade, mas cort
 
 O harness chama as APIs públicas de runtime diretamente para isolar esses custos. Isso é o mesmo comportamento executado nas fronteiras transformadas, mas o fixture HTTP não é compilado pelo transformador; portanto, ele não mede tempo de build nem introduz outras fronteiras instrumentadas pelo compilador.
 
+Os números do pipeline TypeORM e os números HTTP não devem ser comparados como
+se fossem a mesma unidade. O pipeline mede uma execução interna única em
+SQLite em memória. O teste HTTP mede 20 requests com concorrência 4 e inclui
+servidor, socket local, filas de concorrência, serialização, transporte e
+parsing da resposta. Por isso, uma latência HTTP pode ser várias vezes maior
+mesmo quando o trabalho interno é o mesmo.
+
 ### Decomposição do pipeline de uma resposta
 
 O benchmark também mede cada etapa isoladamente. Em 10.000 itens, as medianas
