@@ -106,6 +106,26 @@ precisa retornar: não hidratar `passwordHash` no banco. No mesmo cenário de
 | `repository.find({ select: ... })` + validar + serializar | 14,63 ms | 29,1% menor |
 | QueryBuilder com `select` público + validar + serializar | 14,11 ms | 31,7% menor |
 
+### Comparação direta das três garantias de runtime
+
+Para comparar somente o custo da proteção, os três caminhos usam a mesma
+consulta pública, convertem as entities selecionadas para POJOs, verificam a
+ausência de `passwordHash`, serializam o retorno e variam apenas a garantia de
+runtime:
+
+| Caminho | Mediana para 10.000 itens |
+| --- | ---: |
+| Sem `ts-typed` | **8,69 ms** |
+| `TTOptImmut` | **19,06 ms** |
+| `protectValue` mutável | **48,93 ms** |
+
+Neste cenário, `TTOptImmut` ficou cerca de **2,6x** acima do baseline, enquanto
+`protectValue` ficou cerca de **5,6x** acima. A estratégia imutável ainda é
+aproximadamente **2,6x mais rápida** que a proteção mutável. O custo adicional é
+o preço da garantia de runtime; a escolha correta depende de o DTO poder ser
+imutável. Para entities mutáveis, `protectValue` continua sendo o caminho
+seguro, mas a consulta seletiva e a paginação devem ser priorizadas.
+
 Esses números medem a consulta e a hidratação em SQLite em memória. Em um banco
 remoto, a economia também pode aparecer na quantidade de dados transferidos,
 mas o resultado varia conforme índices, rede, driver e plano de execução.

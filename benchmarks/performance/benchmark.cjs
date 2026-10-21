@@ -102,6 +102,16 @@ function assertPublicResponse(response, expectedCount) {
   return response;
 }
 
+function toPublicPojos(users) {
+  return users.map((user) => ({
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    isActive: user.isActive,
+    department: user.department,
+  }));
+}
+
 async function findDeleteValidateAndSerialize(userCount) {
   const entities = await repository.find({ order: { id: 'ASC' }, take: userCount });
   const response = removePasswordHashInPlace(entities);
@@ -111,11 +121,12 @@ async function findDeleteValidateAndSerialize(userCount) {
 }
 
 async function findPublicSelectValidateAndSerialize(userCount) {
-  const response = await repository.find({
+  const selected = await repository.find({
     select: PUBLIC_SELECT,
     order: { id: 'ASC' },
     take: userCount,
   });
+  const response = toPublicPojos(selected);
   assertPublicResponse(response, userCount);
   assertValue(RESPONSE_ARRAY_SCHEMA, response, CONTEXT);
   return JSON.stringify(response);
@@ -131,6 +142,28 @@ async function queryBuilderPublicSelectValidateAndSerialize(userCount) {
   assertPublicResponse(response, userCount);
   assertValue(RESPONSE_ARRAY_SCHEMA, response, CONTEXT);
   return JSON.stringify(response);
+}
+
+async function findPublicSelectBaselineAndSerialize(userCount) {
+  const selected = await repository.find({
+    select: PUBLIC_SELECT,
+    order: { id: 'ASC' },
+    take: userCount,
+  });
+  const response = toPublicPojos(selected);
+  assertPublicResponse(response, userCount);
+  return JSON.stringify(response);
+}
+
+async function findPublicSelectProtectedAndSerialize(userCount, protector) {
+  const selected = await repository.find({
+    select: PUBLIC_SELECT,
+    order: { id: 'ASC' },
+    take: userCount,
+  });
+  const response = toPublicPojos(selected);
+  assertPublicResponse(response, userCount);
+  return JSON.stringify(protector(RESPONSE_ARRAY_SCHEMA, response, CONTEXT));
 }
 
 function createSeedRows() {
@@ -394,6 +427,18 @@ async function measurePipelineStages(hydratedUsers, batchSizes) {
       queryBuilderPublicSelectValidateAndSerialize: await measureAsync(
         `QueryBuilder public select + validate + JSON.stringify (${userCount})`,
         async () => queryBuilderPublicSelectValidateAndSerialize(userCount),
+      ),
+      publicSelectBaseline: await measureAsync(
+        `public select baseline without ts-typed (${userCount})`,
+        async () => findPublicSelectBaselineAndSerialize(userCount),
+      ),
+      publicSelectOptimizedImmutable: await measureAsync(
+        `public select + TTOptImmut + JSON.stringify (${userCount})`,
+        async () => findPublicSelectProtectedAndSerialize(userCount, protectOptimizedImmutableValue),
+      ),
+      publicSelectMutableProtection: await measureAsync(
+        `public select + protectValue + JSON.stringify (${userCount})`,
+        async () => findPublicSelectProtectedAndSerialize(userCount, protectValue),
       ),
       entityValidation: await measureAsync(
         `entity validation (${userCount})`,
