@@ -162,9 +162,9 @@ warmups), as medianas foram:
 
 | Cenário | Baseline | ts-typed | Relação |
 | --- | ---: | ---: | ---: |
-| CSV, 1.000 linhas | 0,493 ms | 21,919 ms | 44,5x |
-| CSV, 10.000 linhas | 3,758 ms | 201,496 ms | 53,6x |
-| CSV, 50.000 linhas | 18,267 ms | 1.142,554 ms | 62,5x |
+| CSV, 1.000 linhas | 0,397 ms | 20,654 ms | 52,1x |
+| CSV, 10.000 linhas | 3,429 ms | 201,717 ms | 58,8x |
+| CSV, 50.000 linhas | 17,162 ms | 1.150,501 ms | 67,0x |
 | Express, 1 usuário | 0,811 ms | 0,650 ms | ruído de rede local |
 | Express, 50 usuários | 0,481 ms | 3,473 ms | 7,2x |
 | Express, 10.000 usuários | 5,455 ms | 311,306 ms | 57,1x |
@@ -192,6 +192,21 @@ continua sendo limitar o lote com paginação/cursor e selecionar apenas os
 campos necessários. Para pipelines CSV grandes, agrupe a validação em lotes,
 evite criar cópias intermediárias e faça o parse em streaming se a memória for
 o gargalo.
+
+### O ganho de accessors não se transfere automaticamente para CSV
+
+O CSV foi repetido contra o build local com accessors compartilhados. Comparado
+à execução anterior, o typed ficou **5,8% mais rápido em 1.000 linhas**, mas
+ficou praticamente igual em **10.000 linhas (+0,1%)** e **50.000 linhas (+0,7%)**.
+Portanto, não é correto anunciar uma redução fixa de 10% para esse consumidor.
+
+Nesse fluxo, cada linha ainda atravessa várias fronteiras (`parseRow`, criação
+do DTO público, validação do e-mail e retorno de `ConversionResult`). O
+compartilhamento de getter/setter reduz somente uma parcela das alocações; ele
+não elimina as validações recursivas nem os contextos/path criados por linha.
+Para melhorar CSV de verdade, o próximo experimento deve ser uma API de lote
+que valide o conjunto uma vez e uma projeção final `TTOptImmut`, mantendo a
+proteção completa para as entidades mutáveis.
 
 ### Checklist para estudos futuros
 
