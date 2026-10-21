@@ -1,6 +1,6 @@
 [submodule "system/base"]
 	path = system/base
-	url = https://github.com/ts-typed/compiler.git
+	url = https://github.com/ts-typed/ts-typed.git
 [submodule "system/frameworks/nestjs"]
 	path = system/frameworks/nestjs
 	url = https://github.com/ts-typed/nestjs.git
