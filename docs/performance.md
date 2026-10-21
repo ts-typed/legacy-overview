@@ -61,6 +61,7 @@ mais recentes foram:
 | Etapa | Mediana |
 | --- | ---: |
 | TypeORM `find` + hidratação | 8,40 ms |
+| TypeORM `find` + hidratação + `map` + `delete passwordHash` | 12,23 ms |
 | validação da entity | 6,74 ms |
 | projeção removendo `passwordHash` | 0,82 ms |
 | validação do DTO de resposta | 5,70 ms |
@@ -74,6 +75,22 @@ sendo o maior custo da biblioteca, enquanto a serialização de um objeto com
 getters protegidos também adiciona uma parcela relevante. O tempo restante da
 request inclui concorrência, criação do servidor, socket local e outras
 operações do framework.
+
+O harness também mede o caminho de baixo custo `map + delete passwordHash`.
+Cada item remove o campo diretamente na entity hidratada e retorna a mesma
+referência, sem criar um DTO novo. Em uma amostra de 10.000 itens, a etapa
+completa de busca, hidratação e remoção ficou em **12,23 ms**; a projeção que
+cria novos POJOs ficou em **0,83 ms** quando medida isoladamente, sem o custo
+do banco.
+
+Esse cenário é útil para separar o custo do código da aplicação do custo do
+`ts-typed`, mas não é equivalente em segurança: a entity foi mutada. Se ela já
+estava protegida, os accessors dos outros campos permanecem, mas o `delete`
+remove o descriptor de `passwordHash`; esse campo deixa de ter proteção porque
+foi deliberadamente removido. Além disso, qualquer alias para a entity observa
+a mesma mutação. Em produção, só use essa estratégia quando a entity puder ser
+descartada após a resposta e quando a proteção posterior não fizer parte do
+contrato.
 
 ## Como interpretar
 

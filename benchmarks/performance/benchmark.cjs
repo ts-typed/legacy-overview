@@ -63,6 +63,19 @@ function projectWithoutPassword(users) {
   });
 }
 
+/**
+ * Low-overhead comparison path: remove the secret from each hydrated entity
+ * inside map and return the same references. This is intentionally
+ * benchmark-only because it mutates entities and does not install runtime
+ * protection for the deleted property.
+ */
+function removePasswordHashInPlace(users) {
+  return users.map((user) => {
+    delete user.passwordHash;
+    return user;
+  });
+}
+
 function createSeedRows() {
   return Array.from({ length: USER_COUNT }, (_, index) => ({
     name: `User ${index}`,
@@ -289,6 +302,12 @@ async function measurePipelineStages(hydratedUsers, batchSizes) {
       typeormFindHydration: await measureAsync(
         `TypeORM find + hydration (${userCount})`,
         async () => repository.find({ order: { id: 'ASC' }, take: userCount }),
+      ),
+      typeormFindHydrationAndDelete: await measureAsync(
+        `TypeORM find + hydration + delete passwordHash (${userCount})`,
+        async () => removePasswordHashInPlace(
+          await repository.find({ order: { id: 'ASC' }, take: userCount }),
+        ),
       ),
       entityValidation: await measureAsync(
         `entity validation (${userCount})`,
