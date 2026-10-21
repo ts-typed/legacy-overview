@@ -60,10 +60,10 @@ mais recentes foram:
 
 | Etapa | Mediana |
 | --- | ---: |
-| TypeORM `find` + hidratação | 8,40 ms |
-| TypeORM `find` + hidratação + `map` + `delete passwordHash` | 12,23 ms |
-| TypeORM `find` com `select` público (sem `passwordHash`) | 7,12 ms |
-| TypeORM QueryBuilder com `select` público (sem `passwordHash`) | 6,83 ms |
+| TypeORM `find` + hidratação | 8,74 ms |
+| TypeORM `find` + hidratação + `map` + `delete passwordHash` | 11,19 ms |
+| TypeORM `find` com `select` público (sem `passwordHash`) | 6,65 ms |
+| TypeORM QueryBuilder com `select` público (sem `passwordHash`) | 6,80 ms |
 | validação da entity | 6,74 ms |
 | projeção removendo `passwordHash` | 0,82 ms |
 | validação do DTO de resposta | 5,70 ms |
@@ -102,9 +102,9 @@ precisa retornar: não hidratar `passwordHash` no banco. No mesmo cenário de
 
 | Estratégia | Mediana | Diferença contra buscar tudo + `delete` |
 | --- | ---: | ---: |
-| Buscar entity completa e remover a senha no `map` | 12,00 ms | — |
-| `repository.find({ select: ... })` com apenas campos públicos | 7,12 ms | 40,6% menor |
-| QueryBuilder com `select` explícito dos campos públicos | 6,83 ms | 43,0% menor |
+| Buscar entity completa, remover a senha, validar e serializar | 20,64 ms | — |
+| `repository.find({ select: ... })` + validar + serializar | 14,63 ms | 29,1% menor |
+| QueryBuilder com `select` público + validar + serializar | 14,11 ms | 31,7% menor |
 
 Esses números medem a consulta e a hidratação em SQLite em memória. Em um banco
 remoto, a economia também pode aparecer na quantidade de dados transferidos,

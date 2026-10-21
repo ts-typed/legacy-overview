@@ -44,6 +44,20 @@ const USER_RESPONSE_SCHEMA = Object.freeze({
 });
 const ENTITY_ARRAY_SCHEMA = Object.freeze({ kind: 'array', items: USER_ENTITY_SCHEMA });
 const RESPONSE_ARRAY_SCHEMA = Object.freeze({ kind: 'array', items: USER_RESPONSE_SCHEMA });
+const PUBLIC_SELECT = Object.freeze({
+  id: true,
+  name: true,
+  email: true,
+  isActive: true,
+  department: true,
+});
+const PUBLIC_QUERY_COLUMNS = Object.freeze([
+  'user.id',
+  'user.name',
+  'user.email',
+  'user.isActive',
+  'user.department',
+]);
 
 class BenchmarkUserEntity {}
 Entity({ name: 'benchmark_user' })(BenchmarkUserEntity);
@@ -74,6 +88,49 @@ function removePasswordHashInPlace(users) {
     delete user.passwordHash;
     return user;
   });
+}
+
+function assertPublicResponse(response, expectedCount) {
+  if (response.length !== expectedCount) {
+    throw new Error(`Expected ${expectedCount} users, received ${response.length}`);
+  }
+  for (const user of response) {
+    if (Object.prototype.hasOwnProperty.call(user, 'passwordHash')) {
+      throw new Error('Public response still contains passwordHash');
+    }
+  }
+  return response;
+}
+
+async function findDeleteValidateAndSerialize(userCount) {
+  const entities = await repository.find({ order: { id: 'ASC' }, take: userCount });
+  const response = removePasswordHashInPlace(entities);
+  assertPublicResponse(response, userCount);
+  assertValue(RESPONSE_ARRAY_SCHEMA, response, CONTEXT);
+  return JSON.stringify(response);
+}
+
+async function findPublicSelectValidateAndSerialize(userCount) {
+  const response = await repository.find({
+    select: PUBLIC_SELECT,
+    order: { id: 'ASC' },
+    take: userCount,
+  });
+  assertPublicResponse(response, userCount);
+  assertValue(RESPONSE_ARRAY_SCHEMA, response, CONTEXT);
+  return JSON.stringify(response);
+}
+
+async function queryBuilderPublicSelectValidateAndSerialize(userCount) {
+  const response = await repository
+    .createQueryBuilder('user')
+    .select(PUBLIC_QUERY_COLUMNS)
+    .orderBy('user.id', 'ASC')
+    .take(userCount)
+    .getMany();
+  assertPublicResponse(response, userCount);
+  assertValue(RESPONSE_ARRAY_SCHEMA, response, CONTEXT);
+  return JSON.stringify(response);
 }
 
 function createSeedRows() {
@@ -312,13 +369,7 @@ async function measurePipelineStages(hydratedUsers, batchSizes) {
       typeormFindPublicSelect: await measureAsync(
         `TypeORM find with public select (${userCount})`,
         async () => repository.find({
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            isActive: true,
-            department: true,
-          },
+          select: PUBLIC_SELECT,
           order: { id: 'ASC' },
           take: userCount,
         }),
@@ -327,16 +378,22 @@ async function measurePipelineStages(hydratedUsers, batchSizes) {
         `TypeORM QueryBuilder public select (${userCount})`,
         async () => repository
           .createQueryBuilder('user')
-          .select([
-            'user.id',
-            'user.name',
-            'user.email',
-            'user.isActive',
-            'user.department',
-          ])
+          .select(PUBLIC_QUERY_COLUMNS)
           .orderBy('user.id', 'ASC')
           .take(userCount)
           .getMany(),
+      ),
+      findDeleteValidateAndSerialize: await measureAsync(
+        `find + delete + validate + JSON.stringify (${userCount})`,
+        async () => findDeleteValidateAndSerialize(userCount),
+      ),
+      findPublicSelectValidateAndSerialize: await measureAsync(
+        `public select + validate + JSON.stringify (${userCount})`,
+        async () => findPublicSelectValidateAndSerialize(userCount),
+      ),
+      queryBuilderPublicSelectValidateAndSerialize: await measureAsync(
+        `QueryBuilder public select + validate + JSON.stringify (${userCount})`,
+        async () => queryBuilderPublicSelectValidateAndSerialize(userCount),
       ),
       entityValidation: await measureAsync(
         `entity validation (${userCount})`,
