@@ -20,6 +20,45 @@ npx ts-typed build
 
 `init` creates `typets.config.json` without replacing an existing file. See [`@ts-typed/compiler`'s README](https://github.com/ts-typed/compiler#readme) for the full configuration reference, and [`@ts-typed/nestjs`'s README](https://github.com/ts-typed/nestjs#readme) for the NestJS integration (`StrictTypeErrorFilter`, per-field custom error messages, Entity-vs-DTO disambiguation).
 
+## TypeScript to JavaScript
+
+You write the type and ts-typed guarantees that it is applied.
+
+```ts
+interface User {
+  id: number;
+  name: string;
+}
+
+function loadUser(user: User) {
+  return findUserById(user.id);
+}
+```
+
+With `tsc`, interfaces disappear:
+
+```js
+function loadUser(user) {
+  return findUserById(user.id);
+}
+```
+
+With `ts-typed`, the generated JavaScript keeps the contract at the boundary:
+
+```js
+function loadUser(user) {
+  if (typeof user.name !== 'string') {
+    throw new StrictTypeError('user.name');
+  }
+  if (typeof user.id !== 'number') {
+    throw new StrictTypeError('user.id');
+  }
+  return findUserById(user.id);
+}
+```
+
+The generated snippet is simplified for readability; the compiler emits the runtime schema and protection code automatically.
+
 ## Compatibility
 
 The project preserves application compatibility when JavaScript cannot completely intercept a mutation, particularly external aliases, dynamic code and unsupported built-ins. These cases are warnings by default rather than hidden successes. `any`, `unknown`, and declarations without an annotation or initializer remain explicitly open and are listed separately in coverage output. Both package READMEs have a "Known limitations" section listing every current scope boundary and why it exists.

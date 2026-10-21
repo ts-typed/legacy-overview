@@ -14,6 +14,29 @@ O `init` escolhe `tsconfig.build.json` quando ele existe; caso contrário, usa `
 
 Uma fronteira tipada recebe validação completa quando o schema runtime pode ser materializado. Por exemplo, `IResponse<IUser>` produz um schema para `status`, `message` e todos os campos de `data`. Tipos abertos (`any`, `unknown`) são reportados como abertos; tipos restritivos sem schema confiável recebem um warning localizado.
 
+Você escreve o tipo e o ts-typed garante que ele será aplicado:
+
+```ts
+interface User {
+  id: number;
+  name: string;
+}
+
+function loadUser(user: User) {
+  return findUserById(user.id);
+}
+```
+
+Com `tsc`, a interface desaparece do JavaScript. Com `ts-typed`, o JavaScript gerado inclui a verificação de `user.name` e `user.id` antes de executar o método. O trecho abaixo é uma representação resumida do código gerado:
+
+```js
+function loadUser(user) {
+  if (typeof user.name !== 'string') throw new StrictTypeError('user.name');
+  if (typeof user.id !== 'number') throw new StrictTypeError('user.id');
+  return findUserById(user.id);
+}
+```
+
 ```ts
 import { StrictTypeError } from '@ts-typed/compiler';
 
