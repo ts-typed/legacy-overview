@@ -89,6 +89,28 @@ preserva essa compatibilidade.
 
 O primeiro passo de baixo risco foi adotado no compiler `0.1.28`: `SchemaMetadataCache` usa um `WeakMap` por travessia para reutilizar as chaves declaradas e seu `Set` durante validação e instalação de guards. O teste de regressão confirma que quatro itens com o mesmo schema consultam os metadados uma única vez. Como o cache nasce e morre com a chamada, não retém schemas e não depende de invalidação global do registry.
 
+### Experimento: accessors compartilhados por campo
+
+O runtime agora reutiliza as funções de getter/setter para uma mesma chave de
+campo entre objetos protegidos. O estado continua separado por instância em um
+`WeakMap`, então aliases, escritas válidas e escritas inválidas conservam o
+mesmo comportamento. O código da aplicação e a chamada `protectValue` não
+mudam.
+
+Na bateria local, o caminho completo de projeção + proteção para 10.000 DTOs
+caiu de **44,83 ms** (implementação anterior) para **40,07 ms** (**10,6% menos**).
+Para 50 DTOs, a mediana foi **0,292 ms**, contra **0,269 ms** anteriormente;
+em lotes pequenos a diferença fica dentro do ruído do processo. A melhoria
+aparece principalmente porque não são criadas novas closures de getter/setter
+para cada propriedade de cada item.
+
+Esse experimento reduz alocações, mas não remove a necessidade de proteger cada
+campo mutável. Por isso ele é complementar ao `TTOptImmut`, que continua sendo
+mais rápido quando o DTO pode ser imutável. O benchmark HTTP completo também
+foi repetido: no lote de 10.000, Express protegido ficou em **252,85 ms** e
+Nest protegido em **255,54 ms**; a diferença entre frameworks continua menor
+que o custo do trabalho por objeto.
+
 Ainda não é seguro fundir validação e instalação de guards sem uma transação/rollback. Se um item posterior falhar, a implementação não pode deixar os itens anteriores parcialmente protegidos e expostos como se a fronteira tivesse sido aceita.
 
 As alternativas estão priorizadas assim:
