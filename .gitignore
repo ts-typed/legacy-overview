@@ -20,3 +20,7 @@ IMPLEMENTAR_TUDO.md
 .env.*
 !.env.example
 .DS_Store
+
+# IDE and editor specific files
+.idea/
+.planning/
