@@ -502,7 +502,7 @@ async function run() {
 
   const hydratedUsers = await repository.find({ order: { id: 'ASC' } });
   const projectedUsers = projectWithoutPassword(hydratedUsers);
-  const batchSizes = Object.freeze([1, 50, USER_COUNT]);
+  const batchSizes = Object.freeze([1, 50, 1_000, USER_COUNT]);
   const runtime = Object.freeze({
     primitive: measureSync('assertValue(string)', 5_000_000, () => assertValue(STRING, 'ada@example.com', CONTEXT)),
     responseObject: measureSync('assertValue(UserResponse)', 1_000_000, () => assertValue(USER_RESPONSE_SCHEMA, projectedUsers[0], CONTEXT)),
