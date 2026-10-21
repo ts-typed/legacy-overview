@@ -12,7 +12,7 @@ npm install
 npm run benchmark
 ```
 
-O teste HTTP faz cinco amostras de 20 requests, com concorrência 4, para lotes de 1, 50 e 10.000 itens. Toda resposta é verificada quanto ao tamanho e à ausência de `passwordHash`. Há rotas locais equivalentes sem proteção, com `protectValue` e com `TTOptImmut`, em Express e Nest. O filtro real `StrictTypeErrorFilter` também é instalado nos caminhos protegidos do Nest.
+O teste HTTP faz cinco amostras de 20 requests, com concorrência 4, no mesmo endpoint `/users?limit=<quantidade>` para lotes de 1, 50, 1.000 e 10.000 itens. Toda resposta é verificada quanto ao tamanho e à ausência de `passwordHash`. Há execuções equivalentes sem cobertura runtime, com `protectValue` e com `TTOptImmut`, em Express e Nest. O filtro real `StrictTypeErrorFilter` também é instalado nos caminhos protegidos do Nest.
 
 ### Resultado de referência (Node 22.22.3, compiler local 0.1.31, Nest 0.1.22)
 

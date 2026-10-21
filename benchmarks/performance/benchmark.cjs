@@ -5,7 +5,7 @@ require('reflect-metadata');
 const { performance } = require('node:perf_hooks');
 const { once } = require('node:events');
 const express = require('express');
-const { Controller, Get, Module } = require('@nestjs/common');
+const { Controller, Get, Module, Query } = require('@nestjs/common');
 const { NestFactory } = require('@nestjs/core');
 const { DataSource, Entity, PrimaryGeneratedColumn, Column } = require('typeorm');
 const { assertValue, protectValue, protectOptimizedImmutableValue } = require('../../system/base/dist');
@@ -282,10 +282,19 @@ async function measureHttp(name, url, expectedUserCount) {
   });
 }
 
-function createExpressApp(mode, userCount) {
+function readUserLimit(value) {
+  const parsed = Number.parseInt(String(value ?? USER_COUNT), 10);
+  if (!Number.isInteger(parsed) || parsed < 1 || parsed > USER_COUNT) {
+    throw new Error(`limit must be an integer between 1 and ${USER_COUNT}`);
+  }
+  return parsed;
+}
+
+function createExpressApp(mode) {
   const application = express();
-  application.get('/users', async (_request, response, next) => {
+  application.get('/users', async (request, response, next) => {
     try {
+      const userCount = readUserLimit(request.query.limit);
       const entities = await repository.find({ order: { id: 'ASC' }, take: userCount });
       if (mode !== 'baseline') {
         assertValue(ENTITY_ARRAY_SCHEMA, entities, CONTEXT);
@@ -304,9 +313,10 @@ function createExpressApp(mode, userCount) {
   return application;
 }
 
-function createNestModule(mode, userCount) {
+function createNestModule(mode) {
   class BenchmarkController {
-    async list() {
+    async list(limit) {
+      const userCount = readUserLimit(limit);
       const entities = await repository.find({ order: { id: 'ASC' }, take: userCount });
       if (mode !== 'baseline') {
         assertValue(ENTITY_ARRAY_SCHEMA, entities, CONTEXT);
@@ -320,6 +330,7 @@ function createNestModule(mode, userCount) {
     }
   }
   Controller('users')(BenchmarkController);
+  Query('limit')(BenchmarkController.prototype, 'list', 0);
   Get()(BenchmarkController.prototype, 'list', Object.getOwnPropertyDescriptor(BenchmarkController.prototype, 'list'));
   class BenchmarkModule {}
   Module({ controllers: [BenchmarkController] })(BenchmarkModule);
@@ -341,26 +352,27 @@ async function listenNest(application) {
   return `http://127.0.0.1:${application.getHttpServer().address().port}/users`;
 }
 
-async function measureExpressScenario(mode, userCount) {
-  const listener = await listenExpress(createExpressApp(mode, userCount));
+async function measureExpressScenario(mode, batchSizes) {
+  const listener = await listenExpress(createExpressApp(mode));
   try {
-    return await measureHttp(`Express ${mode} (${userCount} users)`, listener.url, userCount);
+    return Object.fromEntries(await Promise.all(batchSizes.map(async (userCount) => [
+      String(userCount), await measureHttp(`Express ${mode} (${userCount} users)`, `${listener.url}?limit=${userCount}`, userCount),
+    ])));
   } finally {
     await new Promise((resolve) => listener.server.close(resolve));
   }
 }
 
-async function measureNestScenario(mode, userCount) {
-  const application = await NestFactory.create(createNestModule(mode, userCount), { logger: false });
+async function measureNestScenario(mode, batchSizes) {
+  const application = await NestFactory.create(createNestModule(mode), { logger: false });
   if (mode !== 'baseline') {
     application.useGlobalFilters(new StrictTypeErrorFilter());
   }
   try {
-    return await measureHttp(
-      `Nest ${mode} (${userCount} users)`,
-      await listenNest(application),
-      userCount,
-    );
+    const baseUrl = await listenNest(application);
+    return Object.fromEntries(await Promise.all(batchSizes.map(async (userCount) => [
+      String(userCount), await measureHttp(`Nest ${mode} (${userCount} users)`, `${baseUrl}?limit=${userCount}`, userCount),
+    ])));
   } finally {
     await application.close();
   }
@@ -471,17 +483,25 @@ async function measurePipelineStages(hydratedUsers, batchSizes) {
 
 async function measureHttpBatches(batchSizes) {
   const batches = {};
+  const express = {};
+  for (const mode of ['baseline', 'guarded', 'optimizedImmutable']) {
+    express[mode] = await measureExpressScenario(mode, batchSizes);
+  }
+  const nest = {};
+  for (const mode of ['baseline', 'guarded', 'optimizedImmutable']) {
+    nest[mode] = await measureNestScenario(mode, batchSizes);
+  }
   for (const userCount of batchSizes) {
     batches[String(userCount)] = Object.freeze({
       express: Object.freeze({
-        baseline: await measureExpressScenario('baseline', userCount),
-        guarded: await measureExpressScenario('guarded', userCount),
-        optimizedImmutable: await measureExpressScenario('optimizedImmutable', userCount),
+        baseline: express.baseline[String(userCount)],
+        guarded: express.guarded[String(userCount)],
+        optimizedImmutable: express.optimizedImmutable[String(userCount)],
       }),
       nest: Object.freeze({
-        baseline: await measureNestScenario('baseline', userCount),
-        guarded: await measureNestScenario('guarded', userCount),
-        optimizedImmutable: await measureNestScenario('optimizedImmutable', userCount),
+        baseline: nest.baseline[String(userCount)],
+        guarded: nest.guarded[String(userCount)],
+        optimizedImmutable: nest.optimizedImmutable[String(userCount)],
       }),
     });
   }
@@ -516,7 +536,7 @@ async function run() {
     const http = await measureHttpBatches(batchSizes);
     console.log(JSON.stringify(Object.freeze({
       node: process.version,
-      methodology: Object.freeze({ userCounts: batchSizes, httpRequestsPerSample: HTTP_REQUEST_COUNT, httpConcurrency: HTTP_CONCURRENCY, database: 'TypeORM + better-sqlite3 in-memory' }),
+      methodology: Object.freeze({ endpoint: '/users?limit=<count>', userCounts: batchSizes, httpRequestsPerSample: HTTP_REQUEST_COUNT, httpConcurrency: HTTP_CONCURRENCY, database: 'TypeORM + better-sqlite3 in-memory' }),
       verification: Object.freeze({ entitiesAreInstances: hydratedUsers.every((user) => user instanceof BenchmarkUserEntity), passwordHashRemoved: !Object.hasOwn(projectWithoutPassword([hydratedUsers[0]])[0], 'passwordHash') }),
       runtime: Object.fromEntries(Object.entries(runtime).map(([key, value]) => [key, stripInternal(value)])),
       http,
