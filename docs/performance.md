@@ -62,6 +62,8 @@ mais recentes foram:
 | --- | ---: |
 | TypeORM `find` + hidratação | 8,40 ms |
 | TypeORM `find` + hidratação + `map` + `delete passwordHash` | 12,23 ms |
+| TypeORM `find` com `select` público (sem `passwordHash`) | 7,12 ms |
+| TypeORM QueryBuilder com `select` público (sem `passwordHash`) | 6,83 ms |
 | validação da entity | 6,74 ms |
 | projeção removendo `passwordHash` | 0,82 ms |
 | validação do DTO de resposta | 5,70 ms |
@@ -91,6 +93,25 @@ foi deliberadamente removido. Além disso, qualquer alias para a entity observa
 a mesma mutação. Em produção, só use essa estratégia quando a entity puder ser
 descartada após a resposta e quando a proteção posterior não fizer parte do
 contrato.
+
+### Buscar sem o campo secreto
+
+Há uma alternativa ainda mais eficiente quando o endpoint já sabe quais campos
+precisa retornar: não hidratar `passwordHash` no banco. No mesmo cenário de
+10.000 usuários, a mediana foi:
+
+| Estratégia | Mediana | Diferença contra buscar tudo + `delete` |
+| --- | ---: | ---: |
+| Buscar entity completa e remover a senha no `map` | 12,00 ms | — |
+| `repository.find({ select: ... })` com apenas campos públicos | 7,12 ms | 40,6% menor |
+| QueryBuilder com `select` explícito dos campos públicos | 6,83 ms | 43,0% menor |
+
+Esses números medem a consulta e a hidratação em SQLite em memória. Em um banco
+remoto, a economia também pode aparecer na quantidade de dados transferidos,
+mas o resultado varia conforme índices, rede, driver e plano de execução.
+O `select` reduz o risco de vazamento porque o segredo nem chega ao objeto de
+resposta. Ainda assim, a validação de saída continua recomendada: ela protege o
+contrato público caso a consulta ou o mapeamento seja alterado no futuro.
 
 ## Como interpretar
 

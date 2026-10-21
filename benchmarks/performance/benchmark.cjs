@@ -309,6 +309,35 @@ async function measurePipelineStages(hydratedUsers, batchSizes) {
           await repository.find({ order: { id: 'ASC' }, take: userCount }),
         ),
       ),
+      typeormFindPublicSelect: await measureAsync(
+        `TypeORM find with public select (${userCount})`,
+        async () => repository.find({
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            isActive: true,
+            department: true,
+          },
+          order: { id: 'ASC' },
+          take: userCount,
+        }),
+      ),
+      typeormQueryBuilderPublicSelect: await measureAsync(
+        `TypeORM QueryBuilder public select (${userCount})`,
+        async () => repository
+          .createQueryBuilder('user')
+          .select([
+            'user.id',
+            'user.name',
+            'user.email',
+            'user.isActive',
+            'user.department',
+          ])
+          .orderBy('user.id', 'ASC')
+          .take(userCount)
+          .getMany(),
+      ),
       entityValidation: await measureAsync(
         `entity validation (${userCount})`,
         async () => assertValue(ENTITY_ARRAY_SCHEMA, users, CONTEXT),
