@@ -7,3 +7,6 @@
 [submodule "system/validators"]
 	path = system/validators
 	url = https://github.com/ts-typed/validators.git
+[submodule "system/frameworks/express"]
+	path = system/frameworks/express
+	url = https://github.com/ts-typed/express.git

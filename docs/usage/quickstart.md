@@ -76,6 +76,26 @@ npm install --save-dev @ts-typed/compiler @ts-typed/nestjs
 
 O adaptador é carregado pela API pública do núcleo. Em um terminal interativo, `npx ts-typed init` detecta NestJS e pergunta se deve registrar `StrictTypeErrorFilter` globalmente. Ao confirmar, ele altera somente um `main.ts` convencional que contenha `const app = await NestFactory.create(...)`, adicionando o import e `app.useGlobalFilters(new StrictTypeErrorFilter())`. A operação é idempotente. O filtro cria a resposta Nest `HttpException` 400 sem incluir payload ou stack; ainda pode ser registrado manualmente com `@UseFilters()` ou como `APP_FILTER`.
 
+## Express
+
+Instale o adaptador HTTP e registre o middleware depois das rotas:
+
+```bash
+npm install @ts-typed/express
+```
+
+```ts
+import express from 'express';
+import { typedErrorHandler } from '@ts-typed/express';
+
+const app = express();
+app.use(express.json());
+app.use('/users', usersRouter);
+app.use(typedErrorHandler());
+```
+
+O middleware converte `StrictTypeError` em respostas JSON seguras, usa `400` para violações de entrada e `500` para falhas internas. Erros que não pertencem ao ts-typed seguem para o próximo middleware de erro do Express. Consulte o [README do pacote Express](https://github.com/ts-typed/express#readme) para hooks de logging, envelopes customizados e respostas agregadas.
+
 ## Cobertura estrita
 
 O padrão é `compiler.onUnsupported: "warn"`, priorizando compatibilidade. Troque para `"error"` quando o projeto deve recusar o build se houver contrato parcial ou não materializável. Leia a seção de limites da [SPEC](../SPEC.md) antes de usar esse modo como política de segurança.

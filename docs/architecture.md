@@ -10,7 +10,7 @@ O ts-typed é organizado como um workspace npm em `system/`. O núcleo não depe
 | `.github/workflows` | Entradas mínimas descobertas pelo GitHub Actions |
 | `docs` | Spec, arquitetura e guias públicos |
 
-São pacotes no mesmo repositório, sem Git aninhado. `typescript` é a integração padrão, sem exigir Nest instalado. `@ts-typed/nestjs` é o primeiro adaptador implementado. Express, Angular, React, Vue e Next.js são possibilidades de expansão; não há suporte implementado anunciado para eles.
+Os pacotes vivem em repositórios próprios e são consumidos neste repositório por submódulos Git. `typescript` é a integração padrão, sem exigir framework instalado. `@ts-typed/nestjs` e `@ts-typed/express` são adaptadores HTTP separados; o compiler permanece agnóstico de framework. Angular, React, Vue e Next.js continuam como possibilidades de expansão.
 
 O núcleo exporta a API de integração em `@ts-typed/compiler/integration`. Na versão 1, um adaptador declara `apiVersion: 1`, `name` e o hook síncrono `resolveProject(context)`, que recebe a raiz do consumidor e retorna uma resolução de projeto validada. Um adaptador pode expor opcionalmente `installGlobalStrictTypeErrorFilter(context)` para o fluxo interativo de `init`; o núcleo apenas pede confirmação e o adaptador é responsável por editar seus próprios arquivos. O builder resolve o adaptador selecionado antes de criar o programa TypeScript. Módulos incompatíveis falham. A integração não pode relaxar contratos nem duplicar a identidade do runtime.
 
