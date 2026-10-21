@@ -148,6 +148,27 @@ foi repetido: no lote de 10.000, Express protegido ficou em **252,85 ms** e
 Nest protegido em **255,54 ms**; a diferença entre frameworks continua menor
 que o custo do trabalho por objeto.
 
+### Instalador especializado por schema
+
+O compiler `0.1.33` adiciona um instalador interno especializado por par
+`schema + protótipo`. Ele pré-calcula as propriedades, os sufixos de path e os
+decorators de resposta/extras uma vez por travessia. O caminho genérico continua
+sendo usado para index signatures e a instalação dos accessors ainda preserva
+as mesmas regras de mutação, identidade e enumeração dos objetos.
+
+Na bateria completa mais recente, a etapa de proteção de 10.000 DTOs caiu de
+**39,24 ms** para **36,21 ms** (**7,7% menos**). O microbenchmark isolado mediu
+**34,44 ms**, aproximadamente **12,2% menos**. A diferença entre as duas
+medições é esperada porque a bateria completa inclui hidratação, serialização e
+requests concorrentes. O ganho é relevante para lotes grandes, mas não elimina
+o custo inevitável de um accessor por campo.
+
+O instalador não é aplicado a uma representação diferente do DTO: não usa
+prototype compartilhado, não transforma o objeto em `Proxy` e não deixa a
+proteção para o primeiro acesso. Assim, `Object.keys`, spread,
+`structuredClone`, aliases e erros de mutação continuam com o comportamento
+anterior.
+
 Ainda não é seguro fundir validação e instalação de guards sem uma transação/rollback. Se um item posterior falhar, a implementação não pode deixar os itens anteriores parcialmente protegidos e expostos como se a fronteira tivesse sido aceita.
 
 As alternativas estão priorizadas assim:
